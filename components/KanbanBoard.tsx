@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useBacklog } from "@/lib/context/BacklogContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,7 +20,6 @@ export default function KanbanBoard() {
     { id: "done", title: "Done", color: "bg-green-100" },
   ]
 
-  // Get all user stories and tasks from all products
   const allUserStories: UserStory[] = []
   const allTasks: Task[] = []
 
@@ -54,14 +52,11 @@ export default function KanbanBoard() {
     let epic, feature, product
 
     if ("epicId" in item) {
-      // It's a UserStory
       userStory = item
     } else {
-      // It's a Task, find its UserStory
       userStory = allUserStories.find((us) => us.id === item.userStoryId)!
     }
 
-    // Find the hierarchy
     state.products.forEach((p) => {
       p.features.forEach((f) => {
         f.epics.forEach((e) => {
@@ -130,7 +125,6 @@ export default function KanbanBoard() {
             >
               <h3 className="font-semibold text-lg mb-4 text-center">{column.title}</h3>
               <div className="flex-1 space-y-3 overflow-y-auto">
-                {/* User Stories */}
                 {allUserStories
                   .filter((story) => story.sprintStatus === column.id)
                   .map((story) => {
@@ -193,7 +187,6 @@ export default function KanbanBoard() {
                     )
                   })}
 
-                {/* Tasks */}
                 {allTasks
                   .filter((task) => task.sprintStatus === column.id)
                   .map((task) => {

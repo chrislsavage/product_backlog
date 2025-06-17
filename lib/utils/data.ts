@@ -48,7 +48,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
   const now = new Date()
   const users = createSampleUsers()
 
-  // Generate unique IDs first
   const productId = generateId()
   const featureId = generateId()
   const epicId = generateId()
@@ -56,7 +55,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
   const task1Id = generateId()
   const task2Id = generateId()
 
-  // Create tasks
   const task1: Task = {
     id: task1Id,
     title: "Implement user authentication",
@@ -85,7 +83,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
     updatedAt: now,
   }
 
-  // Create user story
   const userStory: UserStory = {
     id: userStoryId,
     title: "User Login",
@@ -106,7 +103,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
     updatedAt: now,
   }
 
-  // Create epic
   const epic: Epic = {
     id: epicId,
     title: "User Management",
@@ -120,7 +116,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
     updatedAt: now,
   }
 
-  // Create feature
   const feature: Feature = {
     id: featureId,
     name: "Authentication System",
@@ -133,7 +128,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
     updatedAt: now,
   }
 
-  // Create product
   const product: Product = {
     id: productId,
     name: "E-Commerce Platform",
@@ -153,31 +147,6 @@ export function createSampleData(): { products: Product[]; users: User[]; sprint
     userStories: [],
     tasks: [],
   }
-
-  // Debug logging
-  console.log("Sample data structure:", {
-    product: {
-      id: product.id,
-      name: product.name,
-      featuresCount: product.features.length,
-      features: product.features.map((f) => ({
-        id: f.id,
-        name: f.name,
-        epicsCount: f.epics.length,
-        epics: f.epics.map((e) => ({
-          id: e.id,
-          title: e.title,
-          userStoriesCount: e.userStories.length,
-          userStories: e.userStories.map((us) => ({
-            id: us.id,
-            title: us.title,
-            tasksCount: us.tasks.length,
-            tasks: us.tasks.map((t) => ({ id: t.id, title: t.title })),
-          })),
-        })),
-      })),
-    },
-  })
 
   return {
     products: [product],

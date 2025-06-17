@@ -3,7 +3,6 @@
 import type React from "react"
 import { createContext, useContext, useReducer, useEffect, type ReactNode } from "react"
 import type { Product, Feature, Epic, UserStory, Task, User, Sprint } from "../types"
-import { BacklogService } from "../services/backlog-service"
 
 interface BacklogState {
   products: Product[]
@@ -26,26 +25,10 @@ type BacklogAction =
   | { type: "SET_USERS"; payload: User[] }
   | { type: "SET_SPRINTS"; payload: Sprint[] }
   | { type: "ADD_PRODUCT"; payload: Product }
-  | { type: "UPDATE_PRODUCT"; payload: Product }
-  | { type: "DELETE_PRODUCT"; payload: string }
   | { type: "ADD_FEATURE"; payload: { productId: string; feature: Feature } }
-  | { type: "UPDATE_FEATURE"; payload: Feature }
-  | { type: "DELETE_FEATURE"; payload: string }
   | { type: "ADD_EPIC"; payload: { featureId: string; epic: Epic } }
-  | { type: "UPDATE_EPIC"; payload: Epic }
-  | { type: "DELETE_EPIC"; payload: string }
   | { type: "ADD_USER_STORY"; payload: { epicId: string; userStory: UserStory } }
-  | { type: "UPDATE_USER_STORY"; payload: UserStory }
-  | { type: "DELETE_USER_STORY"; payload: string }
   | { type: "ADD_TASK"; payload: { userStoryId: string; task: Task } }
-  | { type: "UPDATE_TASK"; payload: Task }
-  | { type: "DELETE_TASK"; payload: string }
-  | { type: "ADD_USER"; payload: User }
-  | { type: "UPDATE_USER"; payload: User }
-  | { type: "DELETE_USER"; payload: string }
-  | { type: "ADD_SPRINT"; payload: Sprint }
-  | { type: "UPDATE_SPRINT"; payload: Sprint }
-  | { type: "SET_ACTIVE_SPRINT"; payload: Sprint | null }
   | { type: "MOVE_TO_SPRINT"; payload: { itemId: string; itemType: "user-story" | "task"; sprintStatus: string } }
   | { type: "SELECT_PRODUCT"; payload: string | null }
   | { type: "SELECT_FEATURE"; payload: string | null }
@@ -85,23 +68,7 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
       return { ...state, sprints: action.payload }
 
     case "ADD_PRODUCT":
-      return {
-        ...state,
-        products: [...state.products, action.payload],
-      }
-
-    case "UPDATE_PRODUCT":
-      return {
-        ...state,
-        products: state.products.map((p) => (p.id === action.payload.id ? action.payload : p)),
-      }
-
-    case "DELETE_PRODUCT":
-      return {
-        ...state,
-        products: state.products.filter((p) => p.id !== action.payload),
-        selectedProductId: state.selectedProductId === action.payload ? null : state.selectedProductId,
-      }
+      return { ...state, products: [...state.products, action.payload] }
 
     case "ADD_FEATURE":
       return {
@@ -109,25 +76,6 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
         products: state.products.map((p) =>
           p.id === action.payload.productId ? { ...p, features: [...p.features, action.payload.feature] } : p,
         ),
-      }
-
-    case "UPDATE_FEATURE":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => (feature.id === action.payload.id ? action.payload : feature)),
-        })),
-      }
-
-    case "DELETE_FEATURE":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.filter((feature) => feature.id !== action.payload),
-        })),
-        selectedFeatureId: state.selectedFeatureId === action.payload ? null : state.selectedFeatureId,
       }
 
     case "ADD_EPIC":
@@ -141,31 +89,6 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
               : feature,
           ),
         })),
-      }
-
-    case "UPDATE_EPIC":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.map((epic) => (epic.id === action.payload.id ? action.payload : epic)),
-          })),
-        })),
-      }
-
-    case "DELETE_EPIC":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.filter((epic) => epic.id !== action.payload),
-          })),
-        })),
-        selectedEpicId: state.selectedEpicId === action.payload ? null : state.selectedEpicId,
       }
 
     case "ADD_USER_STORY":
@@ -182,39 +105,6 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
             ),
           })),
         })),
-      }
-
-    case "UPDATE_USER_STORY":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.map((epic) => ({
-              ...epic,
-              userStories: epic.userStories.map((userStory) =>
-                userStory.id === action.payload.id ? action.payload : userStory,
-              ),
-            })),
-          })),
-        })),
-      }
-
-    case "DELETE_USER_STORY":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.map((epic) => ({
-              ...epic,
-              userStories: epic.userStories.filter((userStory) => userStory.id !== action.payload),
-            })),
-          })),
-        })),
-        selectedUserStoryId: state.selectedUserStoryId === action.payload ? null : state.selectedUserStoryId,
       }
 
     case "ADD_TASK":
@@ -236,81 +126,8 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
         })),
       }
 
-    case "UPDATE_TASK":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.map((epic) => ({
-              ...epic,
-              userStories: epic.userStories.map((userStory) => ({
-                ...userStory,
-                tasks: userStory.tasks.map((task) => (task.id === action.payload.id ? action.payload : task)),
-              })),
-            })),
-          })),
-        })),
-      }
-
-    case "DELETE_TASK":
-      return {
-        ...state,
-        products: state.products.map((product) => ({
-          ...product,
-          features: product.features.map((feature) => ({
-            ...feature,
-            epics: feature.epics.map((epic) => ({
-              ...epic,
-              userStories: epic.userStories.map((userStory) => ({
-                ...userStory,
-                tasks: userStory.tasks.filter((task) => task.id !== action.payload),
-              })),
-            })),
-          })),
-        })),
-      }
-
-    case "ADD_USER":
-      return {
-        ...state,
-        users: [...state.users, action.payload],
-      }
-
-    case "UPDATE_USER":
-      return {
-        ...state,
-        users: state.users.map((user) => (user.id === action.payload.id ? action.payload : user)),
-      }
-
-    case "DELETE_USER":
-      return {
-        ...state,
-        users: state.users.filter((user) => user.id !== action.payload),
-      }
-
-    case "ADD_SPRINT":
-      return {
-        ...state,
-        sprints: [...state.sprints, action.payload],
-      }
-
-    case "UPDATE_SPRINT":
-      return {
-        ...state,
-        sprints: state.sprints.map((sprint) => (sprint.id === action.payload.id ? action.payload : sprint)),
-      }
-
-    case "SET_ACTIVE_SPRINT":
-      return {
-        ...state,
-        activeSprint: action.payload,
-      }
-
     case "MOVE_TO_SPRINT":
-      // Update locally first for immediate UI feedback
-      const updatedState = {
+      return {
         ...state,
         products: state.products.map((product) => ({
           ...product,
@@ -336,15 +153,6 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
           })),
         })),
       }
-
-      // Update in database
-      BacklogService.updateSprintStatus(
-        action.payload.itemId,
-        action.payload.itemType,
-        action.payload.sprintStatus,
-      ).catch(console.error)
-
-      return updatedState
 
     case "SELECT_PRODUCT":
       return {
@@ -406,6 +214,10 @@ const BacklogContext = createContext<{
   createTask: (userStoryId: string, task: Omit<Task, "id" | "createdAt" | "updatedAt" | "userStoryId">) => Promise<void>
 } | null>(null)
 
+function generateId(): string {
+  return Math.random().toString(36).substr(2, 9)
+}
+
 export function BacklogProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(backlogReducer, initialState)
 
@@ -415,15 +227,29 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
       try {
         dispatch({ type: "SET_LOADING", payload: true })
 
-        const [products, users, sprints] = await Promise.all([
-          BacklogService.getProducts(),
-          BacklogService.getUsers(),
-          BacklogService.getSprints(),
-        ])
+        // Try to load from Supabase, fallback to sample data
+        try {
+          const { BacklogService } = await import("../services/backlog-service")
+          const [products, users, sprints] = await Promise.all([
+            BacklogService.getProducts(),
+            BacklogService.getUsers(),
+            BacklogService.getSprints(),
+          ])
 
-        dispatch({ type: "SET_PRODUCTS", payload: products })
-        dispatch({ type: "SET_USERS", payload: users })
-        dispatch({ type: "SET_SPRINTS", payload: sprints })
+          dispatch({ type: "SET_PRODUCTS", payload: products })
+          dispatch({ type: "SET_USERS", payload: users })
+          dispatch({ type: "SET_SPRINTS", payload: sprints })
+        } catch (error) {
+          console.warn("Failed to load from Supabase, using sample data:", error)
+
+          // Fallback to sample data
+          const { createSampleData } = await import("../utils/data")
+          const sampleData = createSampleData()
+
+          dispatch({ type: "SET_PRODUCTS", payload: sampleData.products })
+          dispatch({ type: "SET_USERS", payload: sampleData.users })
+          dispatch({ type: "SET_SPRINTS", payload: sampleData.sprints })
+        }
       } catch (error) {
         console.error("Failed to load data:", error)
         dispatch({ type: "SET_ERROR", payload: "Failed to load data" })
@@ -435,7 +261,13 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
 
   const createProduct = async (productData: Omit<Product, "id" | "createdAt" | "updatedAt" | "features">) => {
     try {
-      const product = await BacklogService.createProduct(productData)
+      const product: Product = {
+        ...productData,
+        id: generateId(),
+        features: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
       dispatch({ type: "ADD_PRODUCT", payload: product })
     } catch (error) {
       console.error("Failed to create product:", error)
@@ -448,7 +280,14 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
     featureData: Omit<Feature, "id" | "createdAt" | "updatedAt" | "epics" | "productId">,
   ) => {
     try {
-      const feature = await BacklogService.createFeature({ ...featureData, productId })
+      const feature: Feature = {
+        ...featureData,
+        id: generateId(),
+        productId,
+        epics: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
       dispatch({ type: "ADD_FEATURE", payload: { productId, feature } })
     } catch (error) {
       console.error("Failed to create feature:", error)
@@ -461,7 +300,14 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
     epicData: Omit<Epic, "id" | "createdAt" | "updatedAt" | "userStories" | "featureId">,
   ) => {
     try {
-      const epic = await BacklogService.createEpic({ ...epicData, featureId })
+      const epic: Epic = {
+        ...epicData,
+        id: generateId(),
+        featureId,
+        userStories: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
       dispatch({ type: "ADD_EPIC", payload: { featureId, epic } })
     } catch (error) {
       console.error("Failed to create epic:", error)
@@ -474,7 +320,14 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
     userStoryData: Omit<UserStory, "id" | "createdAt" | "updatedAt" | "tasks" | "epicId">,
   ) => {
     try {
-      const userStory = await BacklogService.createUserStory({ ...userStoryData, epicId })
+      const userStory: UserStory = {
+        ...userStoryData,
+        id: generateId(),
+        epicId,
+        tasks: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
       dispatch({ type: "ADD_USER_STORY", payload: { epicId, userStory } })
     } catch (error) {
       console.error("Failed to create user story:", error)
@@ -487,7 +340,13 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
     taskData: Omit<Task, "id" | "createdAt" | "updatedAt" | "userStoryId">,
   ) => {
     try {
-      const task = await BacklogService.createTask({ ...taskData, userStoryId })
+      const task: Task = {
+        ...taskData,
+        id: generateId(),
+        userStoryId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
       dispatch({ type: "ADD_TASK", payload: { userStoryId, task } })
     } catch (error) {
       console.error("Failed to create task:", error)

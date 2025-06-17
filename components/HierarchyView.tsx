@@ -22,39 +22,12 @@ import {
   Kanban,
 } from "lucide-react"
 import type { Product, Feature, Epic, UserStory, Task } from "@/lib/types"
-import { supabase } from "@/lib/supabase/client"
-import { BacklogService } from "@/lib/services/backlog-service"
 
-type HierarchyViewProps = {}
-
-export default function HierarchyView({}: HierarchyViewProps) {
+export default function HierarchyView() {
   const { state, dispatch, createProduct, createFeature, createEpic, createUserStory, createTask } = useBacklog()
 
-  // Debug logging
-  console.log("HierarchyView state:", {
-    productsCount: state.products.length,
-    products: state.products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      featuresCount: p.features.length,
-      features: p.features.map((f) => ({
-        id: f.id,
-        name: f.name,
-        epicsCount: f.epics.length,
-        epics: f.epics.map((e) => ({
-          id: e.id,
-          title: e.title,
-          userStoriesCount: e.userStories.length,
-        })),
-      })),
-    })),
-  })
-
-  // Initialize expanded items to show the sample data structure
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>()
-
-    // Auto-expand items that have children to show the sample data
     state.products.forEach((product) => {
       if (product.features.length > 0) {
         initialExpanded.add(product.id)
@@ -75,20 +48,15 @@ export default function HierarchyView({}: HierarchyViewProps) {
         })
       }
     })
-
     return initialExpanded
   })
 
   const [addingItems, setAddingItems] = useState<Set<string>>(new Set())
   const [newItemTitles, setNewItemTitles] = useState<Record<string, string>>({})
-  const [editingItems, setEditingItems] = useState<Set<string>>(new Set())
-  const [editItemTitles, setEditItemTitles] = useState<Record<string, string>>({})
 
-  // Auto-expand items when products are loaded
   useEffect(() => {
     if (state.products.length > 0) {
       const newExpanded = new Set(expandedItems)
-
       state.products.forEach((product) => {
         if (product.features.length > 0) {
           newExpanded.add(product.id)
@@ -104,7 +72,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
           })
         }
       })
-
       setExpandedItems(newExpanded)
     }
   }, [state.products])
@@ -194,55 +161,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
       cancelAdding(parentId, type)
     } catch (error) {
       console.error("Failed to create item:", error)
-      // You could show an error message to the user here
-    }
-  }
-
-  const startEditing = (id: string, currentTitle: string, type: string) => {
-    setEditingItems(new Set([...editingItems, id]))
-    setEditItemTitles({ ...editItemTitles, [id]: currentTitle })
-  }
-
-  const cancelEditing = (id: string) => {
-    const newEditingItems = new Set(editingItems)
-    newEditingItems.delete(id)
-    setEditingItems(newEditingItems)
-
-    const newTitles = { ...editItemTitles }
-    delete newTitles[id]
-    setEditItemTitles(newTitles)
-  }
-
-  const handleEditItem = async (id: string, type: string) => {
-    const newTitle = editItemTitles[id]?.trim()
-    if (!newTitle) return
-
-    try {
-      // Update in database based on type
-      if (type === "product") {
-        const { error } = await supabase.from("products").update({ name: newTitle }).eq("id", id)
-        if (error) throw error
-      } else if (type === "feature") {
-        const { error } = await supabase.from("features").update({ name: newTitle }).eq("id", id)
-        if (error) throw error
-      } else if (type === "epic") {
-        const { error } = await supabase.from("epics").update({ title: newTitle }).eq("id", id)
-        if (error) throw error
-      } else if (type === "user-story") {
-        const { error } = await supabase.from("user_stories").update({ title: newTitle }).eq("id", id)
-        if (error) throw error
-      } else if (type === "task") {
-        const { error } = await supabase.from("tasks").update({ title: newTitle }).eq("id", id)
-        if (error) throw error
-      }
-
-      // Refresh data
-      const products = await BacklogService.getProducts()
-      dispatch({ type: "SET_PRODUCTS", payload: products })
-
-      cancelEditing(id)
-    } catch (error) {
-      console.error("Failed to update item:", error)
     }
   }
 
@@ -259,7 +177,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
 
   const getItemCount = (item: Product | Feature | Epic | UserStory) => {
     if ("features" in item) {
-      // Product
       return item.features.reduce(
         (total, feature) =>
           total +
@@ -272,7 +189,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
         item.features.length,
       )
     } else if ("epics" in item) {
-      // Feature
       return item.epics.reduce(
         (total, epic) =>
           total +
@@ -280,10 +196,8 @@ export default function HierarchyView({}: HierarchyViewProps) {
         item.epics.length,
       )
     } else if ("userStories" in item) {
-      // Epic
       return item.userStories.reduce((total, story) => total + story.tasks.length, item.userStories.length)
     } else if ("tasks" in item) {
-      // User Story
       return item.tasks.length
     }
     return 0
@@ -325,42 +239,12 @@ export default function HierarchyView({}: HierarchyViewProps) {
 
   const renderTask = (task: Task, level: number) => {
     const assignedUser = getUserById(task.assignedUserId)
-    const isEditing = editingItems.has(task.id)
 
     return (
       <div key={task.id} className="flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-100">
         <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
           <CheckSquare className="w-4 h-4 text-blue-600" />
-          {isEditing ? (
-            <div className="flex items-center space-x-2 flex-1">
-              <Input
-                value={editItemTitles[task.id] || ""}
-                onChange={(e) => setEditItemTitles({ ...editItemTitles, [task.id]: e.target.value })}
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleEditItem(task.id, "task")
-                  } else if (e.key === "Escape") {
-                    cancelEditing(task.id)
-                  }
-                }}
-                autoFocus
-              />
-              <Button size="sm" onClick={() => handleEditItem(task.id, "task")}>
-                Save
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => cancelEditing(task.id)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <span
-              className="font-medium cursor-pointer hover:text-blue-600"
-              onClick={() => startEditing(task.id, task.title, "task")}
-            >
-              {task.title}
-            </span>
-          )}
+          <span className="font-medium">{task.title}</span>
           <Badge className={getPriorityColor(task.priority)} variant="secondary">
             P{task.priority}
           </Badge>
@@ -387,11 +271,10 @@ export default function HierarchyView({}: HierarchyViewProps) {
     const isExpanded = expandedItems.has(userStory.id)
     const assignedUser = getUserById(userStory.assignedUserId)
     const taskCount = userStory.tasks.length
-    const isEditing = editingItems.has(userStory.id)
 
     return (
       <div key={userStory.id}>
-        <div className="flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-100">
+        <div className="flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-100 group">
           <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
             <button onClick={() => toggleExpanded(userStory.id)} className="p-1 hover:bg-gray-200 rounded">
               {taskCount > 0 ? (
@@ -405,36 +288,7 @@ export default function HierarchyView({}: HierarchyViewProps) {
               )}
             </button>
             <BookOpen className="w-4 h-4 text-green-600" />
-            {isEditing ? (
-              <div className="flex items-center space-x-2 flex-1">
-                <Input
-                  value={editItemTitles[userStory.id] || ""}
-                  onChange={(e) => setEditItemTitles({ ...editItemTitles, [userStory.id]: e.target.value })}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleEditItem(userStory.id, "user-story")
-                    } else if (e.key === "Escape") {
-                      cancelEditing(userStory.id)
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => handleEditItem(userStory.id, "user-story")}>
-                  Save
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => cancelEditing(userStory.id)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="font-medium cursor-pointer hover:text-blue-600"
-                onClick={() => startEditing(userStory.id, userStory.title, "user-story")}
-              >
-                {userStory.title}
-              </span>
-            )}
+            <span className="font-medium">{userStory.title}</span>
             <Badge className={getPriorityColor(userStory.priority)} variant="secondary">
               P{userStory.priority}
             </Badge>
@@ -475,7 +329,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
     const isExpanded = expandedItems.has(epic.id)
     const assignedUser = getUserById(epic.assignedUserId)
     const itemCount = getItemCount(epic)
-    const isEditing = editingItems.has(epic.id)
 
     return (
       <div key={epic.id} className="group">
@@ -493,36 +346,7 @@ export default function HierarchyView({}: HierarchyViewProps) {
               )}
             </button>
             <Zap className="w-4 h-4 text-yellow-600" />
-            {isEditing ? (
-              <div className="flex items-center space-x-2 flex-1">
-                <Input
-                  value={editItemTitles[epic.id] || ""}
-                  onChange={(e) => setEditItemTitles({ ...editItemTitles, [epic.id]: e.target.value })}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleEditItem(epic.id, "epic")
-                    } else if (e.key === "Escape") {
-                      cancelEditing(epic.id)
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => handleEditItem(epic.id, "epic")}>
-                  Save
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => cancelEditing(epic.id)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="font-medium cursor-pointer hover:text-blue-600"
-                onClick={() => startEditing(epic.id, epic.title, "epic")}
-              >
-                {epic.title}
-              </span>
-            )}
+            <span className="font-medium">{epic.title}</span>
             <Badge className={getPriorityColor(epic.priority)} variant="secondary">
               P{epic.priority}
             </Badge>
@@ -565,7 +389,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
     const isExpanded = expandedItems.has(feature.id)
     const assignedUser = getUserById(feature.assignedUserId)
     const itemCount = getItemCount(feature)
-    const isEditing = editingItems.has(feature.id)
 
     return (
       <div key={feature.id} className="group">
@@ -583,36 +406,7 @@ export default function HierarchyView({}: HierarchyViewProps) {
               )}
             </button>
             <Star className="w-4 h-4 text-purple-600" />
-            {isEditing ? (
-              <div className="flex items-center space-x-2 flex-1">
-                <Input
-                  value={editItemTitles[feature.id] || ""}
-                  onChange={(e) => setEditItemTitles({ ...editItemTitles, [feature.id]: e.target.value })}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleEditItem(feature.id, "feature")
-                    } else if (e.key === "Escape") {
-                      cancelEditing(feature.id)
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => handleEditItem(feature.id, "feature")}>
-                  Save
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => cancelEditing(feature.id)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="font-medium cursor-pointer hover:text-blue-600"
-                onClick={() => startEditing(feature.id, feature.name, "feature")}
-              >
-                {feature.name}
-              </span>
-            )}
+            <span className="font-medium">{feature.name}</span>
             <Badge className={getPriorityColor(feature.priority)} variant="secondary">
               P{feature.priority}
             </Badge>
@@ -651,7 +445,6 @@ export default function HierarchyView({}: HierarchyViewProps) {
   const renderProduct = (product: Product, level = 0) => {
     const isExpanded = expandedItems.has(product.id)
     const itemCount = getItemCount(product)
-    const isEditing = editingItems.has(product.id)
 
     return (
       <div key={product.id} className="group">
@@ -673,36 +466,7 @@ export default function HierarchyView({}: HierarchyViewProps) {
             ) : (
               <Folder className="w-5 h-5 text-blue-600" />
             )}
-            {isEditing ? (
-              <div className="flex items-center space-x-2 flex-1">
-                <Input
-                  value={editItemTitles[product.id] || ""}
-                  onChange={(e) => setEditItemTitles({ ...editItemTitles, [product.id]: e.target.value })}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleEditItem(product.id, "product")
-                    } else if (e.key === "Escape") {
-                      cancelEditing(product.id)
-                    }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" onClick={() => handleEditItem(product.id, "product")}>
-                  Save
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => cancelEditing(product.id)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="font-semibold text-lg cursor-pointer hover:text-blue-600"
-                onClick={() => startEditing(product.id, product.name, "product")}
-              >
-                {product.name}
-              </span>
-            )}
+            <span className="font-semibold text-lg">{product.name}</span>
             <Badge variant="outline">v{product.version}</Badge>
           </div>
           <div className="flex items-center space-x-4">
@@ -763,21 +527,18 @@ export default function HierarchyView({}: HierarchyViewProps) {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {/* Header Row */}
             <div className="flex items-center py-3 px-4 bg-gray-50 border-b font-medium text-sm text-gray-600">
               <div className="flex-1">Products, Features, Epics, User Stories, Tasks</div>
               <div className="flex items-center space-x-4">
                 <span className="w-20 text-center">Owner</span>
                 <span className="w-8 text-center">Count</span>
-                <div className="w-10" /> {/* Space for add button */}
+                <div className="w-10" />
               </div>
             </div>
 
-            {/* Tree Content */}
             <div className="divide-y divide-gray-100">
               {state.products.sort((a, b) => a.name.localeCompare(b.name)).map((product) => renderProduct(product))}
 
-              {/* Add Product Row */}
               <div className="p-4 border-t">
                 <Button
                   variant="ghost"
