@@ -13,7 +13,7 @@ interface BacklogState {
   selectedFeatureId: string | null
   selectedEpicId: string | null
   selectedUserStoryId: string | null
-  currentView: "backlog" | "kanban"
+  currentView: "backlog" | "kanban" | "hierarchy"
   activeSprint: Sprint | null
   loading: boolean
   error: string | null
