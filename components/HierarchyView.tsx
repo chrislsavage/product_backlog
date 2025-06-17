@@ -737,13 +737,21 @@ export default function HierarchyView({}: HierarchyViewProps) {
                 <span>Product Hierarchy</span>
               </CardTitle>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" onClick={() => dispatch({ type: "SET_VIEW", payload: "backlog" })} size="sm">
+                <Button
+                  variant={state.currentView === "backlog" ? "default" : "outline"}
+                  onClick={() => dispatch({ type: "SET_VIEW", payload: "backlog" })}
+                  size="sm"
+                >
                   Cards
                 </Button>
-                <Button variant="default" size="sm">
+                <Button variant={state.currentView === "hierarchy" ? "default" : "outline"} size="sm">
                   Hierarchy
                 </Button>
-                <Button variant="outline" onClick={() => dispatch({ type: "SET_VIEW", payload: "kanban" })} size="sm">
+                <Button
+                  variant={state.currentView === "kanban" ? "default" : "outline"}
+                  onClick={() => dispatch({ type: "SET_VIEW", payload: "kanban" })}
+                  size="sm"
+                >
                   <Kanban className="w-4 h-4 mr-2" />
                   Sprint Planning
                 </Button>

@@ -51,7 +51,7 @@ type BacklogAction =
   | { type: "SELECT_FEATURE"; payload: string | null }
   | { type: "SELECT_EPIC"; payload: string | null }
   | { type: "SELECT_USER_STORY"; payload: string | null }
-  | { type: "SET_VIEW"; payload: "backlog" | "kanban" }
+  | { type: "SET_VIEW"; payload: "backlog" | "kanban" | "hierarchy" }
 
 const initialState: BacklogState = {
   products: [],

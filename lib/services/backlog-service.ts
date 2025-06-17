@@ -1,6 +1,10 @@
 import { supabase } from "../supabase/client"
 import type { Product, Feature, Epic, UserStory, Task, User, Sprint } from "../types"
 
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  console.warn("Supabase environment variables not found")
+}
+
 export class BacklogService {
   // Products
   static async getProducts(): Promise<Product[]> {
