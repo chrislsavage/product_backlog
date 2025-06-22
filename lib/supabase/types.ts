@@ -137,6 +137,8 @@ export interface Database {
           sprint_status: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           epic_id: string
           assigned_user_id: string | null
+          sprint_id: string | null
+          completed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -151,6 +153,8 @@ export interface Database {
           sprint_status?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           epic_id: string
           assigned_user_id?: string | null
+          sprint_id?: string | null
+          completed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -165,6 +169,8 @@ export interface Database {
           sprint_status?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           epic_id?: string
           assigned_user_id?: string | null
+          sprint_id?: string | null
+          completed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -180,6 +186,8 @@ export interface Database {
           sprint_status: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           user_story_id: string
           assigned_user_id: string | null
+          sprint_id: string | null
+          completed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -193,6 +201,8 @@ export interface Database {
           sprint_status?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           user_story_id: string
           assigned_user_id?: string | null
+          sprint_id?: string | null
+          completed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -206,6 +216,8 @@ export interface Database {
           sprint_status?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
           user_story_id?: string
           assigned_user_id?: string | null
+          sprint_id?: string | null
+          completed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -217,6 +229,7 @@ export interface Database {
           start_date: string
           end_date: string
           status: "planning" | "active" | "completed"
+          is_current: boolean | null
           created_at: string
           updated_at: string
         }
@@ -226,6 +239,7 @@ export interface Database {
           start_date: string
           end_date: string
           status?: "planning" | "active" | "completed"
+          is_current?: boolean | null
           created_at?: string
           updated_at?: string
         }
@@ -235,6 +249,7 @@ export interface Database {
           start_date?: string
           end_date?: string
           status?: "planning" | "active" | "completed"
+          is_current?: boolean | null
           created_at?: string
           updated_at?: string
         }

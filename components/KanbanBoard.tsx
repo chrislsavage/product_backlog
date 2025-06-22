@@ -10,18 +10,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, CheckSquare, Filter, X, Edit, Save, DeleteIcon as Cancel } from "lucide-react"
+import { ArrowLeft, CheckSquare, Filter, X, Edit, Save, DeleteIcon as Cancel, Calendar } from "lucide-react"
 import type { Task, SprintStatus } from "@/lib/types"
 import UserSelector from "./UserSelector"
 
 export default function KanbanBoard() {
-  const { state, dispatch, updateTask } = useBacklog()
+  const { state, dispatch, updateTask, setCurrentSprint } = useBacklog()
 
   // Filter states
   const [selectedUser, setSelectedUser] = useState<string>("all")
   const [selectedUserStory, setSelectedUserStory] = useState<string>("all")
   const [selectedEpic, setSelectedEpic] = useState<string>("all")
   const [selectedFeature, setSelectedFeature] = useState<string>("all")
+  const [selectedSprintFilter, setSelectedSprintFilter] = useState<string>("current")
 
   // Editing states
   const [editingTask, setEditingTask] = useState<string | null>(null)
@@ -107,9 +108,27 @@ export default function KanbanBoard() {
       if (selectedUserStory !== "all" && task.userStory.id !== selectedUserStory) return false
       if (selectedEpic !== "all" && task.epic.id !== selectedEpic) return false
       if (selectedFeature !== "all" && task.feature.id !== selectedFeature) return false
+
+      // Sprint filter
+      if (selectedSprintFilter === "current" && task.sprintId !== state.currentSprint?.id) return false
+      if (
+        selectedSprintFilter !== "current" &&
+        selectedSprintFilter !== "all" &&
+        task.sprintId !== selectedSprintFilter
+      )
+        return false
+
       return true
     })
-  }, [allTasks, selectedUser, selectedUserStory, selectedEpic, selectedFeature])
+  }, [
+    allTasks,
+    selectedUser,
+    selectedUserStory,
+    selectedEpic,
+    selectedFeature,
+    selectedSprintFilter,
+    state.currentSprint,
+  ])
 
   const getPriorityColor = (priority: number) => {
     if (priority >= 8) return "bg-red-100 text-red-800"
@@ -135,14 +154,15 @@ export default function KanbanBoard() {
     const data = JSON.parse(e.dataTransfer.getData("text/plain"))
     const { task } = data
 
-    dispatch({
-      type: "MOVE_TO_SPRINT",
-      payload: {
-        itemId: task.id,
-        itemType: "task",
-        sprintStatus,
-      },
-    })
+    // Update the task with completion tracking
+    const updatedTask = {
+      ...task,
+      sprintStatus,
+      status: sprintStatus === "done" ? "done" : task.status,
+      completedAt: sprintStatus === "done" ? new Date() : task.completedAt,
+    }
+
+    updateTask(updatedTask)
   }
 
   const handleEditStart = (task: Task) => {
@@ -186,10 +206,15 @@ export default function KanbanBoard() {
     setSelectedUserStory("all")
     setSelectedEpic("all")
     setSelectedFeature("all")
+    setSelectedSprintFilter("current")
   }
 
   const hasActiveFilters =
-    selectedUser !== "all" || selectedUserStory !== "all" || selectedEpic !== "all" || selectedFeature !== "all"
+    selectedUser !== "all" ||
+    selectedUserStory !== "all" ||
+    selectedEpic !== "all" ||
+    selectedFeature !== "all" ||
+    selectedSprintFilter !== "current"
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -207,6 +232,50 @@ export default function KanbanBoard() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Sprint Planning Board</h1>
               <p className="text-gray-600 mt-2">Manage tasks across sprint stages</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="current-sprint">Current Sprint:</Label>
+              <Select
+                value={state.currentSprint?.id || "none"}
+                onValueChange={(value) => {
+                  if (value !== "none") {
+                    setCurrentSprint(value)
+                  }
+                }}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue>
+                    {state.currentSprint ? (
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>{state.currentSprint.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          Current
+                        </Badge>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">No Current Sprint</span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {state.sprints.map((sprint) => (
+                    <SelectItem key={sprint.id} value={sprint.id}>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>{sprint.name}</span>
+                        {sprint.isCurrent && (
+                          <Badge variant="outline" className="text-xs">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -228,7 +297,25 @@ export default function KanbanBoard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div>
+                <Label htmlFor="sprint-filter">Sprint</Label>
+                <Select value={selectedSprintFilter} onValueChange={setSelectedSprintFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All sprints" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Sprints</SelectItem>
+                    <SelectItem value="current">Current Sprint Only</SelectItem>
+                    {state.sprints.map((sprint) => (
+                      <SelectItem key={sprint.id} value={sprint.id}>
+                        {sprint.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div>
                 <Label htmlFor="user-filter">Assigned User</Label>
                 <Select value={selectedUser} onValueChange={setSelectedUser}>
@@ -458,6 +545,14 @@ export default function KanbanBoard() {
                                 </>
                               )}
                             </div>
+
+                            {/* Completion Date */}
+                            {task.completedAt && (
+                              <div className="text-xs text-green-600 flex items-center space-x-1">
+                                <span>✓</span>
+                                <span>Completed: {new Date(task.completedAt).toLocaleDateString()}</span>
+                              </div>
+                            )}
 
                             {/* Assigned User */}
                             <div className="flex items-center justify-between">

@@ -16,6 +16,8 @@ export interface Task {
   userStoryId: string
   assignedUserId?: string
   sprintStatus?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
+  sprintId?: string // New field for sprint assignment
+  completedAt?: Date // New field for completion tracking
   createdAt: Date
   updatedAt: Date
 }
@@ -31,6 +33,8 @@ export interface UserStory {
   epicId: string
   assignedUserId?: string
   sprintStatus?: "backlog" | "sprint-backlog" | "in-progress" | "review" | "done"
+  sprintId?: string // New field for sprint assignment
+  completedAt?: Date // New field for completion tracking
   tasks: Task[]
   createdAt: Date
   updatedAt: Date
@@ -77,6 +81,7 @@ export interface Sprint {
   startDate: Date
   endDate: Date
   status: "planning" | "active" | "completed"
+  isCurrent?: boolean // New field to track current sprint
   userStories: string[] // User Story IDs
   tasks: string[] // Task IDs
 }

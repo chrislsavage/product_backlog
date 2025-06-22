@@ -8,6 +8,7 @@ interface BacklogState {
   products: Product[]
   users: User[]
   sprints: Sprint[]
+  currentSprint: Sprint | null
   selectedProductId: string | null
   selectedFeatureId: string | null
   selectedEpicId: string | null
@@ -24,6 +25,9 @@ type BacklogAction =
   | { type: "SET_PRODUCTS"; payload: Product[] }
   | { type: "SET_USERS"; payload: User[] }
   | { type: "SET_SPRINTS"; payload: Sprint[] }
+  | { type: "SET_CURRENT_SPRINT"; payload: Sprint | null }
+  | { type: "ASSIGN_TASK_TO_SPRINT"; payload: { taskId: string; sprintId: string | null } }
+  | { type: "ASSIGN_USER_STORY_TO_SPRINT"; payload: { userStoryId: string; sprintId: string | null } }
   | { type: "ADD_PRODUCT"; payload: Product }
   | { type: "ADD_FEATURE"; payload: { productId: string; feature: Feature } }
   | { type: "ADD_EPIC"; payload: { featureId: string; epic: Epic } }
@@ -54,6 +58,7 @@ const initialState: BacklogState = {
   products: [],
   users: [],
   sprints: [],
+  currentSprint: null,
   selectedProductId: null,
   selectedFeatureId: null,
   selectedEpicId: null,
@@ -93,6 +98,48 @@ function backlogReducer(state: BacklogState, action: BacklogAction): BacklogStat
 
     case "SET_SPRINTS":
       return { ...state, sprints: action.payload }
+
+    case "SET_CURRENT_SPRINT":
+      return { ...state, currentSprint: action.payload }
+
+    case "ASSIGN_TASK_TO_SPRINT":
+      return {
+        ...state,
+        products: state.products.map((product) => ({
+          ...product,
+          features: product.features.map((feature) => ({
+            ...feature,
+            epics: feature.epics.map((epic) => ({
+              ...epic,
+              userStories: epic.userStories.map((userStory) => ({
+                ...userStory,
+                tasks: userStory.tasks.map((task) =>
+                  task.id === action.payload.taskId ? { ...task, sprintId: action.payload.sprintId } : task,
+                ),
+              })),
+            })),
+          })),
+        })),
+      }
+
+    case "ASSIGN_USER_STORY_TO_SPRINT":
+      return {
+        ...state,
+        products: state.products.map((product) => ({
+          ...product,
+          features: product.features.map((feature) => ({
+            ...feature,
+            epics: feature.epics.map((epic) => ({
+              ...epic,
+              userStories: epic.userStories.map((userStory) =>
+                userStory.id === action.payload.userStoryId
+                  ? { ...userStory, sprintId: action.payload.sprintId }
+                  : userStory,
+              ),
+            })),
+          })),
+        })),
+      }
 
     case "ADD_PRODUCT":
       return { ...state, products: [...state.products, action.payload] }
@@ -585,6 +632,9 @@ const BacklogContext = createContext<{
   updateUserStory: (userStory: UserStory) => Promise<void>
   updateTask: (task: Task) => Promise<void>
   updateProduct: (product: Product) => Promise<void>
+  assignTaskToSprint: (taskId: string, sprintId: string | null) => Promise<void>
+  assignUserStoryToSprint: (userStoryId: string, sprintId: string | null) => Promise<void>
+  setCurrentSprint: (sprintId: string) => Promise<void>
 } | null>(null)
 
 function generateId(): string {
@@ -603,15 +653,17 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
         // Try to load from Supabase, fallback to sample data
         try {
           const { BacklogService } = await import("../services/backlog-service")
-          const [products, users, sprints] = await Promise.all([
+          const [products, users, sprints, currentSprint] = await Promise.all([
             BacklogService.getProducts(),
             BacklogService.getUsers(),
             BacklogService.getSprints(),
+            BacklogService.getCurrentSprint(),
           ])
 
           dispatch({ type: "SET_PRODUCTS", payload: products })
           dispatch({ type: "SET_USERS", payload: users })
           dispatch({ type: "SET_SPRINTS", payload: sprints })
+          dispatch({ type: "SET_CURRENT_SPRINT", payload: currentSprint })
         } catch (error) {
           console.warn("Failed to load from Supabase, using sample data:", error)
 
@@ -803,6 +855,47 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const assignTaskToSprint = async (taskId: string, sprintId: string | null) => {
+    try {
+      const { BacklogService } = await import("../services/backlog-service")
+      await BacklogService.assignTaskToSprint(taskId, sprintId)
+      dispatch({ type: "ASSIGN_TASK_TO_SPRINT", payload: { taskId, sprintId } })
+    } catch (error) {
+      console.error("Failed to assign task to sprint:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to assign task to sprint" })
+    }
+  }
+
+  const assignUserStoryToSprint = async (userStoryId: string, sprintId: string | null) => {
+    try {
+      const { BacklogService } = await import("../services/backlog-service")
+      await BacklogService.assignUserStoryToSprint(userStoryId, sprintId)
+      dispatch({ type: "ASSIGN_USER_STORY_TO_SPRINT", payload: { userStoryId, sprintId } })
+    } catch (error) {
+      console.error("Failed to assign user story to sprint:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to assign user story to sprint" })
+    }
+  }
+
+  const setCurrentSprint = async (sprintId: string) => {
+    try {
+      const { BacklogService } = await import("../services/backlog-service")
+      await BacklogService.setCurrentSprint(sprintId)
+
+      // Update the current sprint in state
+      const currentSprint = state.sprints.find((s) => s.id === sprintId)
+      if (currentSprint) {
+        dispatch({ type: "SET_CURRENT_SPRINT", payload: { ...currentSprint, isCurrent: true } })
+        // Update sprints to reflect the change
+        const updatedSprints = state.sprints.map((s) => ({ ...s, isCurrent: s.id === sprintId }))
+        dispatch({ type: "SET_SPRINTS", payload: updatedSprints })
+      }
+    } catch (error) {
+      console.error("Failed to set current sprint:", error)
+      dispatch({ type: "SET_ERROR", payload: "Failed to set current sprint" })
+    }
+  }
+
   return (
     <BacklogContext.Provider
       value={{
@@ -821,6 +914,9 @@ export function BacklogProvider({ children }: { children: ReactNode }) {
         updateUserStory,
         updateTask,
         updateProduct,
+        assignTaskToSprint,
+        assignUserStoryToSprint,
+        setCurrentSprint,
       }}
     >
       {children}

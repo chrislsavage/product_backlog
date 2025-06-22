@@ -7,8 +7,8 @@ import { useBacklog } from "@/lib/context/BacklogContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   ChevronDown,
   ChevronRight,
@@ -25,6 +25,7 @@ import {
   Edit,
   GripVertical,
   Trash2,
+  Calendar,
 } from "lucide-react"
 import type { Product, Feature, Epic, UserStory, Task } from "@/lib/types"
 import UserSelector from "./UserSelector"
@@ -58,6 +59,8 @@ export default function HierarchyView() {
     updateEpic,
     updateUserStory,
     updateTask,
+    assignTaskToSprint,
+    assignUserStoryToSprint,
   } = useBacklog()
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
@@ -281,6 +284,10 @@ export default function HierarchyView() {
     return state.users.find((user) => user.id === userId)
   }
 
+  const getSprintById = (sprintId?: string) => {
+    return state.sprints.find((sprint) => sprint.id === sprintId)
+  }
+
   const getItemCount = (item: Product | Feature | Epic | UserStory) => {
     if ("features" in item) {
       return item.features.reduce(
@@ -359,6 +366,7 @@ export default function HierarchyView() {
 
   const renderTask = (task: Task, level: number) => {
     const assignedUser = getUserById(task.assignedUserId)
+    const assignedSprint = getSprintById(task.sprintId)
     const isDragOver = dragOverItem === task.id
     const isDragging = draggedItem?.id === task.id
 
@@ -381,6 +389,11 @@ export default function HierarchyView() {
             <Badge className={getPriorityColor(task.priority)} variant="secondary">
               P{task.priority}
             </Badge>
+            {task.completedAt && (
+              <Badge variant="outline" className="text-xs text-green-600">
+                ✓ {new Date(task.completedAt).toLocaleDateString()}
+              </Badge>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -402,19 +415,8 @@ export default function HierarchyView() {
             </Button>
           </div>
           <div className="flex items-center space-x-4">
-            {assignedUser && (
-              <Avatar className="w-6 h-6">
-                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">
-                  {assignedUser.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-            )}
-            <span className="text-sm text-gray-500 w-8 text-right">{task.estimatedHours || 0}</span>
-            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+            {/* Owner */}
+            <div className="w-32">
               <UserSelector
                 selectedUserId={task.assignedUserId}
                 onUserChange={(userId) => {
@@ -424,6 +426,47 @@ export default function HierarchyView() {
                 size="sm"
                 placeholder="Assign"
               />
+            </div>
+            {/* Count (estimated hours) */}
+            <span className="text-sm text-gray-500 w-12 text-right">{task.estimatedHours || 0}h</span>
+            {/* Sprint Assignment */}
+            <div className="w-32">
+              <Select
+                value={task.sprintId || "none"}
+                onValueChange={(value) => {
+                  const sprintId = value === "none" ? null : value
+                  assignTaskToSprint(task.id, sprintId)
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue>
+                    {assignedSprint ? (
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{assignedSprint.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">No Sprint</span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Sprint</SelectItem>
+                  {state.sprints.map((sprint) => (
+                    <SelectItem key={sprint.id} value={sprint.id}>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-3 h-3" />
+                        <span>{sprint.name}</span>
+                        {sprint.isCurrent && (
+                          <Badge variant="outline" className="text-xs">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -437,6 +480,7 @@ export default function HierarchyView() {
   const renderUserStory = (userStory: UserStory, level: number) => {
     const isExpanded = expandedItems.has(userStory.id)
     const assignedUser = getUserById(userStory.assignedUserId)
+    const assignedSprint = getSprintById(userStory.sprintId)
     const taskCount = userStory.tasks.length
     const isDragOver = dragOverItem === userStory.id
     const isDragging = draggedItem?.id === userStory.id
@@ -525,14 +569,8 @@ export default function HierarchyView() {
             </Button>
           </div>
           <div className="flex items-center space-x-4">
-            {assignedUser && (
-              <Avatar className="w-6 h-6">
-                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
-              </Avatar>
-            )}
-            <span className="text-sm text-gray-500 w-8 text-right">{taskCount}</span>
-            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+            {/* Owner */}
+            <div className="w-32">
               <UserSelector
                 selectedUserId={userStory.assignedUserId}
                 onUserChange={(userId) => {
@@ -542,6 +580,47 @@ export default function HierarchyView() {
                 size="sm"
                 placeholder="Assign"
               />
+            </div>
+            {/* Count */}
+            <span className="text-sm text-gray-500 w-12 text-right">{taskCount}</span>
+            {/* Sprint Assignment */}
+            <div className="w-32">
+              <Select
+                value={userStory.sprintId || "none"}
+                onValueChange={(value) => {
+                  const sprintId = value === "none" ? null : value
+                  assignUserStoryToSprint(userStory.id, sprintId)
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue>
+                    {assignedSprint ? (
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{assignedSprint.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">No Sprint</span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Sprint</SelectItem>
+                  {state.sprints.map((sprint) => (
+                    <SelectItem key={sprint.id} value={sprint.id}>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-3 h-3" />
+                        <span>{sprint.name}</span>
+                        {sprint.isCurrent && (
+                          <Badge variant="outline" className="text-xs">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -611,14 +690,8 @@ export default function HierarchyView() {
             </Button>
           </div>
           <div className="flex items-center space-x-4">
-            {assignedUser && (
-              <Avatar className="w-6 h-6">
-                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
-              </Avatar>
-            )}
-            <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
-            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+            {/* Owner */}
+            <div className="w-32">
               <UserSelector
                 selectedUserId={epic.assignedUserId}
                 onUserChange={(userId) => {
@@ -628,6 +701,12 @@ export default function HierarchyView() {
                 size="sm"
                 placeholder="Assign"
               />
+            </div>
+            {/* Count */}
+            <span className="text-sm text-gray-500 w-12 text-right">{itemCount}</span>
+            {/* Sprint Assignment - N/A for epics */}
+            <div className="w-32">
+              <span className="text-xs text-gray-400">N/A</span>
             </div>
           </div>
         </div>
@@ -700,14 +779,8 @@ export default function HierarchyView() {
             </Button>
           </div>
           <div className="flex items-center space-x-4">
-            {assignedUser && (
-              <Avatar className="w-6 h-6">
-                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
-              </Avatar>
-            )}
-            <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
-            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+            {/* Owner */}
+            <div className="w-32">
               <UserSelector
                 selectedUserId={feature.assignedUserId}
                 onUserChange={(userId) => {
@@ -717,6 +790,12 @@ export default function HierarchyView() {
                 size="sm"
                 placeholder="Assign"
               />
+            </div>
+            {/* Count */}
+            <span className="text-sm text-gray-500 w-12 text-right">{itemCount}</span>
+            {/* Sprint Assignment - N/A for features */}
+            <div className="w-32">
+              <span className="text-xs text-gray-400">N/A</span>
             </div>
           </div>
         </div>
@@ -860,7 +939,16 @@ export default function HierarchyView() {
             <Badge variant="outline">v{product.version}</Badge>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
+            {/* Owner - N/A for products */}
+            <div className="w-32">
+              <span className="text-xs text-gray-400">N/A</span>
+            </div>
+            {/* Count */}
+            <span className="text-sm text-gray-500 w-12 text-right">{itemCount}</span>
+            {/* Sprint Assignment - N/A for products */}
+            <div className="w-32">
+              <span className="text-xs text-gray-400">N/A</span>
+            </div>
             <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
               <Button size="sm" variant="ghost" onClick={() => setEditingProduct({ ...product })}>
                 <Edit className="w-4 h-4" />
@@ -933,8 +1021,9 @@ export default function HierarchyView() {
             <div className="flex items-center py-3 px-4 bg-gray-50 border-b font-medium text-sm text-gray-600">
               <div className="flex-1">Products, Features, Epics, User Stories, Tasks</div>
               <div className="flex items-center space-x-4">
-                <span className="w-20 text-center">Owner</span>
-                <span className="w-8 text-center">Count</span>
+                <span className="w-32 text-center">Owner</span>
+                <span className="w-12 text-center">Count</span>
+                <span className="w-32 text-center">Sprint</span>
                 <div className="w-10" />
               </div>
             </div>
