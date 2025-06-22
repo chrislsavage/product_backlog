@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useBacklog } from "@/lib/context/BacklogContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,11 +22,43 @@ import {
   FolderOpen,
   Folder,
   Kanban,
+  Edit,
+  GripVertical,
+  Trash2,
 } from "lucide-react"
 import type { Product, Feature, Epic, UserStory, Task } from "@/lib/types"
+import UserSelector from "./UserSelector"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function HierarchyView() {
-  const { state, dispatch, createProduct, createFeature, createEpic, createUserStory, createTask } = useBacklog()
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [draggedItem, setDraggedItem] = useState<{ id: string; type: string } | null>(null)
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null)
+  const [editingStoryPoints, setEditingStoryPoints] = useState<string | null>(null)
+  const [tempStoryPoints, setTempStoryPoints] = useState<number | undefined>(undefined)
+
+  const {
+    state,
+    dispatch,
+    createProduct,
+    createFeature,
+    createEpic,
+    createUserStory,
+    createTask,
+    updateProduct,
+    updateFeature,
+    updateEpic,
+    updateUserStory,
+    updateTask,
+  } = useBacklog()
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>()
@@ -110,58 +144,130 @@ export default function HierarchyView() {
     if (!title) return
 
     try {
-      switch (type) {
-        case "product":
-          await createProduct({
-            name: title,
-            description: "",
-            version: "1.0.0",
+      // Handle sibling task creation
+      if (parentId.includes("-sibling")) {
+        const taskId = parentId.replace("-sibling", "")
+        // Find the task to get its user story ID
+        let userStoryId = ""
+        state.products.forEach((product) => {
+          product.features.forEach((feature) => {
+            feature.epics.forEach((epic) => {
+              epic.userStories.forEach((userStory) => {
+                const foundTask = userStory.tasks.find((t) => t.id === taskId)
+                if (foundTask) {
+                  userStoryId = userStory.id
+                }
+              })
+            })
           })
-          break
+        })
 
-        case "feature":
-          await createFeature(parentId, {
-            name: title,
-            description: "",
-            priority: 5,
-          })
-          break
-
-        case "epic":
-          await createEpic(parentId, {
-            title: title,
-            description: "",
-            status: "planning",
-            priority: 5,
-          })
-          break
-
-        case "user-story":
-          await createUserStory(parentId, {
-            title: title,
-            description: "",
-            acceptanceCriteria: [],
-            priority: 5,
-            status: "backlog",
-            sprintStatus: "backlog",
-          })
-          break
-
-        case "task":
-          await createTask(parentId, {
+        if (userStoryId) {
+          await createTask(userStoryId, {
             title: title,
             description: "",
             status: "todo",
             priority: 5,
             sprintStatus: "backlog",
           })
-          break
+        }
+      } else {
+        switch (type) {
+          case "product":
+            await createProduct({
+              name: title,
+              description: "",
+              version: "1.0.0",
+            })
+            break
+
+          case "feature":
+            await createFeature(parentId, {
+              name: title,
+              description: "",
+              priority: 5,
+            })
+            break
+
+          case "epic":
+            await createEpic(parentId, {
+              title: title,
+              description: "",
+              status: "planning",
+              priority: 5,
+            })
+            break
+
+          case "user-story":
+            await createUserStory(parentId, {
+              title: title,
+              description: "",
+              acceptanceCriteria: [],
+              priority: 5,
+              status: "backlog",
+              sprintStatus: "backlog",
+            })
+            break
+
+          case "task":
+            await createTask(parentId, {
+              title: title,
+              description: "",
+              status: "todo",
+              priority: 5,
+              sprintStatus: "backlog",
+            })
+            break
+        }
       }
 
       cancelAdding(parentId, type)
     } catch (error) {
       console.error("Failed to create item:", error)
     }
+  }
+
+  const handleDragStart = (e: React.DragEvent, id: string, type: string) => {
+    setDraggedItem({ id, type })
+    e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData("text/plain", JSON.stringify({ id, type }))
+  }
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    setDragOverItem(targetId)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverItem(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: string, targetType: string) => {
+    e.preventDefault()
+    setDragOverItem(null)
+
+    if (!draggedItem || draggedItem.id === targetId) {
+      setDraggedItem(null)
+      return
+    }
+
+    // Only allow reordering within the same type and parent
+    if (draggedItem.type !== targetType) {
+      setDraggedItem(null)
+      return
+    }
+
+    dispatch({
+      type: "REORDER_ITEMS",
+      payload: {
+        draggedId: draggedItem.id,
+        targetId: targetId,
+        itemType: draggedItem.type,
+      },
+    })
+
+    setDraggedItem(null)
   }
 
   const getPriorityColor = (priority: number) => {
@@ -209,8 +315,22 @@ export default function HierarchyView() {
 
     if (!isAdding) return null
 
+    // Calculate proper indentation based on item type with larger fixed values
+    let paddingLeft = "pl-8"
+    if (type === "task") {
+      paddingLeft = "pl-20"
+    } else if (type === "user-story") {
+      paddingLeft = "pl-16"
+    } else if (type === "epic") {
+      paddingLeft = "pl-12"
+    } else if (type === "feature") {
+      paddingLeft = "pl-8"
+    } else if (type === "product") {
+      paddingLeft = "pl-4"
+    }
+
     return (
-      <div className={`flex items-center py-2 pl-${level * 6 + 8} pr-4 border-l-2 border-blue-200`}>
+      <div className={`flex items-center py-2 ${paddingLeft} pr-4 border-l-2 border-blue-200`}>
         <div className="flex items-center space-x-2 flex-1">
           <Input
             value={newItemTitles[key] || ""}
@@ -239,30 +359,77 @@ export default function HierarchyView() {
 
   const renderTask = (task: Task, level: number) => {
     const assignedUser = getUserById(task.assignedUserId)
+    const isDragOver = dragOverItem === task.id
+    const isDragging = draggedItem?.id === task.id
 
     return (
-      <div key={task.id} className="flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-100">
-        <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
-          <CheckSquare className="w-4 h-4 text-blue-600" />
-          <span className="font-medium">{task.title}</span>
-          <Badge className={getPriorityColor(task.priority)} variant="secondary">
-            P{task.priority}
-          </Badge>
+      <div key={task.id}>
+        <div
+          className={`flex items-center py-3 pl-20 pr-4 hover:bg-gray-50 border-l-2 border-gray-100 group cursor-move ${
+            isDragOver ? "bg-blue-50 border-blue-300" : ""
+          } ${isDragging ? "opacity-50" : ""}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, task.id, "task")}
+          onDragOver={(e) => handleDragOver(e, task.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, task.id, "task")}
+        >
+          <div className="flex items-center space-x-3 flex-1">
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100" />
+            <CheckSquare className="w-4 h-4 text-blue-600" />
+            <span className="font-medium">{task.title}</span>
+            <Badge className={getPriorityColor(task.priority)} variant="secondary">
+              P{task.priority}
+            </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => startAdding(`${task.id}-sibling`, "task")}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteTask(task.id)
+              }}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          </div>
+          <div className="flex items-center space-x-4">
+            {assignedUser && (
+              <Avatar className="w-6 h-6">
+                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
+                <AvatarFallback className="text-xs">
+                  {assignedUser.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+            )}
+            <span className="text-sm text-gray-500 w-8 text-right">{task.estimatedHours || 0}</span>
+            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+              <UserSelector
+                selectedUserId={task.assignedUserId}
+                onUserChange={(userId) => {
+                  const updatedTask = { ...task, assignedUserId: userId }
+                  updateTask(updatedTask)
+                }}
+                size="sm"
+                placeholder="Assign"
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex items-center space-x-4">
-          {assignedUser && (
-            <Avatar className="w-6 h-6">
-              <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-              <AvatarFallback className="text-xs">
-                {assignedUser.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
-              </AvatarFallback>
-            </Avatar>
-          )}
-          <span className="text-sm text-gray-500 w-8 text-right">{task.estimatedHours || 0}</span>
-        </div>
+
+        {/* Add form appears directly below this task */}
+        {renderAddItemRow(`${task.id}-sibling`, "task", level)}
       </div>
     )
   }
@@ -271,11 +438,23 @@ export default function HierarchyView() {
     const isExpanded = expandedItems.has(userStory.id)
     const assignedUser = getUserById(userStory.assignedUserId)
     const taskCount = userStory.tasks.length
+    const isDragOver = dragOverItem === userStory.id
+    const isDragging = draggedItem?.id === userStory.id
 
     return (
       <div key={userStory.id}>
-        <div className="flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-100 group">
-          <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
+        <div
+          className={`flex items-center py-3 pl-16 pr-4 hover:bg-gray-50 border-l-2 border-gray-100 group cursor-move ${
+            isDragOver ? "bg-blue-50 border-blue-300" : ""
+          } ${isDragging ? "opacity-50" : ""}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, userStory.id, "user-story")}
+          onDragOver={(e) => handleDragOver(e, userStory.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, userStory.id, "user-story")}
+        >
+          <div className="flex items-center space-x-3 flex-1">
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100" />
             <button onClick={() => toggleExpanded(userStory.id)} className="p-1 hover:bg-gray-200 rounded">
               {taskCount > 0 ? (
                 isExpanded ? (
@@ -292,29 +471,78 @@ export default function HierarchyView() {
             <Badge className={getPriorityColor(userStory.priority)} variant="secondary">
               P{userStory.priority}
             </Badge>
-            {userStory.storyPoints && <Badge variant="outline">{userStory.storyPoints} pts</Badge>}
+            {editingStoryPoints === userStory.id ? (
+              <div className="flex items-center space-x-1">
+                <Input
+                  type="number"
+                  min="1"
+                  max="21"
+                  value={tempStoryPoints || ""}
+                  onChange={(e) => setTempStoryPoints(e.target.value ? Number.parseInt(e.target.value) : undefined)}
+                  className="w-16 h-6 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleStoryPointsSave(userStory)
+                    } else if (e.key === "Escape") {
+                      handleStoryPointsCancel()
+                    }
+                  }}
+                  onBlur={() => handleStoryPointsSave(userStory)}
+                  autoFocus
+                />
+                <span className="text-xs text-gray-500">pts</span>
+              </div>
+            ) : (
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-gray-100"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleStoryPointsEdit(userStory.id, userStory.storyPoints)
+                }}
+              >
+                {userStory.storyPoints || 0} pts
+              </Badge>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => startAdding(userStory.id, "task")}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteUserStory(userStory.id)
+              }}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
           </div>
           <div className="flex items-center space-x-4">
             {assignedUser && (
               <Avatar className="w-6 h-6">
                 <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">
-                  {assignedUser.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
+                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
               </Avatar>
             )}
             <span className="text-sm text-gray-500 w-8 text-right">{taskCount}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => startAdding(userStory.id, "task")}
-              className="opacity-0 group-hover:opacity-100"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+              <UserSelector
+                selectedUserId={userStory.assignedUserId}
+                onUserChange={(userId) => {
+                  const updatedUserStory = { ...userStory, assignedUserId: userId }
+                  updateUserStory(updatedUserStory)
+                }}
+                size="sm"
+                placeholder="Assign"
+              />
+            </div>
           </div>
         </div>
 
@@ -329,11 +557,23 @@ export default function HierarchyView() {
     const isExpanded = expandedItems.has(epic.id)
     const assignedUser = getUserById(epic.assignedUserId)
     const itemCount = getItemCount(epic)
+    const isDragOver = dragOverItem === epic.id
+    const isDragging = draggedItem?.id === epic.id
 
     return (
       <div key={epic.id} className="group">
-        <div className="flex items-center py-3 pl-6 pr-4 hover:bg-gray-50 border-l-2 border-gray-200">
-          <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
+        <div
+          className={`flex items-center py-3 pl-12 pr-4 hover:bg-gray-50 border-l-2 border-gray-200 cursor-move ${
+            isDragOver ? "bg-blue-50 border-blue-300" : ""
+          } ${isDragging ? "opacity-50" : ""}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, epic.id, "epic")}
+          onDragOver={(e) => handleDragOver(e, epic.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, epic.id, "epic")}
+        >
+          <div className="flex items-center space-x-3 flex-1">
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100" />
             <button onClick={() => toggleExpanded(epic.id)} className="p-1 hover:bg-gray-200 rounded">
               {epic.userStories.length > 0 ? (
                 isExpanded ? (
@@ -350,28 +590,45 @@ export default function HierarchyView() {
             <Badge className={getPriorityColor(epic.priority)} variant="secondary">
               P{epic.priority}
             </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => startAdding(epic.id, "user-story")}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteEpic(epic.id)
+              }}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
           </div>
           <div className="flex items-center space-x-4">
             {assignedUser && (
               <Avatar className="w-6 h-6">
                 <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">
-                  {assignedUser.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
+                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
               </Avatar>
             )}
             <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => startAdding(epic.id, "user-story")}
-              className="opacity-0 group-hover:opacity-100"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+              <UserSelector
+                selectedUserId={epic.assignedUserId}
+                onUserChange={(userId) => {
+                  const updatedEpic = { ...epic, assignedUserId: userId }
+                  updateEpic(updatedEpic)
+                }}
+                size="sm"
+                placeholder="Assign"
+              />
+            </div>
           </div>
         </div>
 
@@ -389,11 +646,23 @@ export default function HierarchyView() {
     const isExpanded = expandedItems.has(feature.id)
     const assignedUser = getUserById(feature.assignedUserId)
     const itemCount = getItemCount(feature)
+    const isDragOver = dragOverItem === feature.id
+    const isDragging = draggedItem?.id === feature.id
 
     return (
       <div key={feature.id} className="group">
-        <div className="flex items-center py-3 pl-4 pr-4 hover:bg-gray-50 border-l-2 border-gray-300">
-          <div className={`pl-${level * 6} flex items-center space-x-3 flex-1`}>
+        <div
+          className={`flex items-center py-3 pl-8 pr-4 hover:bg-gray-50 border-l-2 border-gray-300 cursor-move ${
+            isDragOver ? "bg-blue-50 border-blue-300" : ""
+          } ${isDragging ? "opacity-50" : ""}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, feature.id, "feature")}
+          onDragOver={(e) => handleDragOver(e, feature.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, feature.id, "feature")}
+        >
+          <div className="flex items-center space-x-3 flex-1">
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100" />
             <button onClick={() => toggleExpanded(feature.id)} className="p-1 hover:bg-gray-200 rounded">
               {feature.epics.length > 0 ? (
                 isExpanded ? (
@@ -410,28 +679,45 @@ export default function HierarchyView() {
             <Badge className={getPriorityColor(feature.priority)} variant="secondary">
               P{feature.priority}
             </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => startAdding(feature.id, "epic")}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeleteFeature(feature.id)
+              }}
+              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
           </div>
           <div className="flex items-center space-x-4">
             {assignedUser && (
               <Avatar className="w-6 h-6">
                 <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                <AvatarFallback className="text-xs">
-                  {assignedUser.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
+                <AvatarFallback className="text-xs">{assignedUser.name.split(" ").map((n) => n[0])}</AvatarFallback>
               </Avatar>
             )}
             <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => startAdding(feature.id, "epic")}
-              className="opacity-0 group-hover:opacity-100"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+              <UserSelector
+                selectedUserId={feature.assignedUserId}
+                onUserChange={(userId) => {
+                  const updatedFeature = { ...feature, assignedUserId: userId }
+                  updateFeature(updatedFeature)
+                }}
+                size="sm"
+                placeholder="Assign"
+              />
+            </div>
           </div>
         </div>
 
@@ -442,14 +728,118 @@ export default function HierarchyView() {
     )
   }
 
+  const handleUpdateProduct = async (updatedProduct: Product) => {
+    try {
+      await updateProduct(updatedProduct)
+      setEditingProduct(null)
+    } catch (error) {
+      console.error("Failed to update product:", error)
+    }
+  }
+
+  const handleStoryPointsEdit = (userStoryId: string, currentPoints?: number) => {
+    setEditingStoryPoints(userStoryId)
+    setTempStoryPoints(currentPoints)
+  }
+
+  const handleStoryPointsSave = async (userStory: UserStory) => {
+    try {
+      const updatedUserStory = { ...userStory, storyPoints: tempStoryPoints }
+      await updateUserStory(updatedUserStory)
+      setEditingStoryPoints(null)
+      setTempStoryPoints(undefined)
+    } catch (error) {
+      console.error("Failed to update story points:", error)
+    }
+  }
+
+  const handleStoryPointsCancel = () => {
+    setEditingStoryPoints(null)
+    setTempStoryPoints(undefined)
+  }
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this product? This will delete all features, epics, user stories, and tasks within it.",
+      )
+    ) {
+      try {
+        dispatch({ type: "DELETE_PRODUCT", payload: productId })
+      } catch (error) {
+        console.error("Failed to delete product:", error)
+      }
+    }
+  }
+
+  const handleDeleteFeature = async (featureId: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this feature? This will delete all epics, user stories, and tasks within it.",
+      )
+    ) {
+      try {
+        dispatch({ type: "DELETE_FEATURE", payload: featureId })
+      } catch (error) {
+        console.error("Failed to delete feature:", error)
+      }
+    }
+  }
+
+  const handleDeleteEpic = async (epicId: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this epic? This will delete all user stories and tasks within it.",
+      )
+    ) {
+      try {
+        dispatch({ type: "DELETE_EPIC", payload: epicId })
+      } catch (error) {
+        console.error("Failed to delete epic:", error)
+      }
+    }
+  }
+
+  const handleDeleteUserStory = async (userStoryId: string) => {
+    if (window.confirm("Are you sure you want to delete this user story? This will delete all tasks within it.")) {
+      try {
+        dispatch({ type: "DELETE_USER_STORY", payload: userStoryId })
+      } catch (error) {
+        console.error("Failed to delete user story:", error)
+      }
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (window.confirm("Are you sure you want to delete this task?")) {
+      try {
+        dispatch({ type: "DELETE_TASK", payload: taskId })
+      } catch (error) {
+        console.error("Failed to delete task:", error)
+      }
+    }
+  }
+
   const renderProduct = (product: Product, level = 0) => {
     const isExpanded = expandedItems.has(product.id)
     const itemCount = getItemCount(product)
+    const isDragOver = dragOverItem === product.id
+    const isDragging = draggedItem?.id === product.id
 
     return (
       <div key={product.id} className="group">
-        <div className="flex items-center py-4 pl-2 pr-4 hover:bg-gray-50 border-l-4 border-blue-500">
+        <div
+          className={`flex items-center py-4 pl-2 pr-4 hover:bg-gray-50 border-l-4 border-blue-500 cursor-move ${
+            isDragOver ? "bg-blue-50 border-blue-300" : ""
+          } ${isDragging ? "opacity-50" : ""}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, product.id, "product")}
+          onDragOver={(e) => handleDragOver(e, product.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, product.id, "product")}
+        >
           <div className="flex items-center space-x-3 flex-1">
+            <GripVertical className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100" />
             <button onClick={() => toggleExpanded(product.id)} className="p-1 hover:bg-gray-200 rounded">
               {product.features.length > 0 ? (
                 isExpanded ? (
@@ -471,21 +861,34 @@ export default function HierarchyView() {
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-500 w-8 text-right">{itemCount}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => startAdding(product.id, "feature")}
-              className="opacity-0 group-hover:opacity-100"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+              <Button size="sm" variant="ghost" onClick={() => setEditingProduct({ ...product })}>
+                <Edit className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => startAdding(product.id, "feature")}>
+                <Plus className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteProduct(product.id)
+                }}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
         {renderAddItemRow(product.id, "feature", level + 1)}
 
         {isExpanded &&
-          product.features.sort((a, b) => b.priority - a.priority).map((feature) => renderFeature(feature, level + 1))}
+          product.features
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((feature) => renderFeature(feature, level + 1))}
       </div>
     )
   }
@@ -554,6 +957,52 @@ export default function HierarchyView() {
           </CardContent>
         </Card>
       </div>
+      {/* Edit Product Dialog */}
+      <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>Update product information.</DialogDescription>
+          </DialogHeader>
+          {editingProduct && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="hierarchy-product-name">Product Name</Label>
+                <Input
+                  id="hierarchy-product-name"
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  placeholder="Enter product name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="hierarchy-product-description">Description</Label>
+                <Input
+                  id="hierarchy-product-description"
+                  value={editingProduct.description}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                  placeholder="Enter product description"
+                />
+              </div>
+              <div>
+                <Label htmlFor="hierarchy-product-version">Version</Label>
+                <Input
+                  id="hierarchy-product-version"
+                  value={editingProduct.version}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, version: e.target.value })}
+                  placeholder="Enter version (e.g., 1.0.0)"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingProduct(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => editingProduct && handleUpdateProduct(editingProduct)}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

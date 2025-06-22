@@ -5,12 +5,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Plus, Package, Star, Zap, BookOpen, CheckSquare, Kanban } from "lucide-react"
+import { Plus, Package, Star, Zap, BookOpen, CheckSquare, Kanban, Users, Edit } from "lucide-react"
 import KanbanBoard from "./KanbanBoard"
 import HierarchyView from "./HierarchyView"
+import UserSelector from "./UserSelector"
+import UserManagement from "./UserManagement"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { useState } from "react"
+import type { Product } from "@/lib/types"
 
 export default function Dashboard() {
-  const { state, dispatch } = useBacklog()
+  const { state, dispatch, updateFeature, updateEpic, updateUserStory, updateTask, updateProduct } = useBacklog()
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
   if (state.loading) {
     return (
@@ -44,6 +59,27 @@ export default function Dashboard() {
     return <HierarchyView />
   }
 
+  if (state.currentView === "users") {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Team Management</h1>
+              <p className="text-gray-600 mt-2">Manage your team members and their assignments</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" onClick={() => dispatch({ type: "SET_VIEW", payload: "backlog" })} size="sm">
+                Back to Backlog
+              </Button>
+            </div>
+          </div>
+          <UserManagement />
+        </div>
+      </div>
+    )
+  }
+
   const selectedProduct = state.products.find((p) => p.id === state.selectedProductId)
   const selectedFeature = selectedProduct?.features.find((c) => c.id === state.selectedFeatureId)
   const selectedEpic = selectedFeature?.epics.find((e) => e.id === state.selectedEpicId)
@@ -71,6 +107,15 @@ export default function Dashboard() {
 
   const getUserById = (userId?: string) => {
     return state.users.find((user) => user.id === userId)
+  }
+
+  const handleUpdateProduct = async (updatedProduct: Product) => {
+    try {
+      await updateProduct(updatedProduct)
+      setEditingProduct(null)
+    } catch (error) {
+      console.error("Failed to update product:", error)
+    }
   }
 
   return (
@@ -103,6 +148,14 @@ export default function Dashboard() {
             >
               <Kanban className="w-4 h-4 mr-2" />
               Sprint Planning
+            </Button>
+            <Button
+              variant={state.currentView === "users" ? "default" : "outline"}
+              onClick={() => dispatch({ type: "SET_VIEW", payload: "users" })}
+              size="sm"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Team
             </Button>
           </div>
         </div>
@@ -185,17 +238,31 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {state.products.map((product) => (
-                  <Card
-                    key={product.id}
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => dispatch({ type: "SELECT_PRODUCT", payload: product.id })}
-                  >
+                  <Card key={product.id} className="hover:shadow-lg transition-shadow">
                     <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Package className="w-5 h-5 mr-2" />
-                        {product.name}
-                      </CardTitle>
-                      <CardDescription>{product.description}</CardDescription>
+                      <div className="flex items-start justify-between">
+                        <div
+                          className="flex-1 cursor-pointer"
+                          onClick={() => dispatch({ type: "SELECT_PRODUCT", payload: product.id })}
+                        >
+                          <CardTitle className="flex items-center">
+                            <Package className="w-5 h-5 mr-2" />
+                            {product.name}
+                          </CardTitle>
+                          <CardDescription>{product.description}</CardDescription>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingProduct({ ...product })
+                          }}
+                          className="ml-2"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="flex justify-between items-center">
@@ -206,6 +273,53 @@ export default function Dashboard() {
                   </Card>
                 ))}
               </div>
+
+              {/* Edit Product Dialog */}
+              <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Edit Product</DialogTitle>
+                    <DialogDescription>Update product information.</DialogDescription>
+                  </DialogHeader>
+                  {editingProduct && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="product-name">Product Name</Label>
+                        <Input
+                          id="product-name"
+                          value={editingProduct.name}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                          placeholder="Enter product name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="product-description">Description</Label>
+                        <Input
+                          id="product-description"
+                          value={editingProduct.description}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                          placeholder="Enter product description"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="product-version">Version</Label>
+                        <Input
+                          id="product-version"
+                          value={editingProduct.version}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, version: e.target.value })}
+                          placeholder="Enter version (e.g., 1.0.0)"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEditingProduct(null)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={() => editingProduct && handleUpdateProduct(editingProduct)}>Save Changes</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 
@@ -241,22 +355,21 @@ export default function Dashboard() {
                           <CardDescription>{feature.description}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">{feature.epics.length} epics</span>
-                            {assignedUser && (
-                              <div className="flex items-center space-x-1">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="text-xs">
-                                    {assignedUser.name
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-xs">{assignedUser.name}</span>
-                              </div>
-                            )}
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-500">{feature.epics.length} epics</span>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 mb-2 block">Assigned to:</label>
+                              <UserSelector
+                                selectedUserId={feature.assignedUserId}
+                                onUserChange={(userId) => {
+                                  const updatedFeature = { ...feature, assignedUserId: userId }
+                                  updateFeature(updatedFeature)
+                                }}
+                                size="sm"
+                              />
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -303,20 +416,17 @@ export default function Dashboard() {
                               <Badge className={getStatusColor(epic.status)}>{epic.status}</Badge>
                               <span className="text-sm text-gray-500">{epic.userStories.length} stories</span>
                             </div>
-                            {assignedUser && (
-                              <div className="flex items-center space-x-1">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="text-xs">
-                                    {assignedUser.name
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-xs">{assignedUser.name}</span>
-                              </div>
-                            )}
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 mb-2 block">Assigned to:</label>
+                              <UserSelector
+                                selectedUserId={epic.assignedUserId}
+                                onUserChange={(userId) => {
+                                  const updatedEpic = { ...epic, assignedUserId: userId }
+                                  updateEpic(updatedEpic)
+                                }}
+                                size="sm"
+                              />
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -370,20 +480,33 @@ export default function Dashboard() {
                               <div className="text-sm text-gray-500">
                                 {story.tasks.length} tasks • {story.acceptanceCriteria.length} criteria
                               </div>
-                              {assignedUser && (
-                                <div className="flex items-center space-x-1">
-                                  <Avatar className="w-6 h-6">
-                                    <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                                    <AvatarFallback className="text-xs">
-                                      {assignedUser.name
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-xs">{assignedUser.name}</span>
-                                </div>
-                              )}
+                              <div>
+                                <label className="text-sm font-medium text-gray-700 mb-2 block">Assigned to:</label>
+                                <UserSelector
+                                  selectedUserId={story.assignedUserId}
+                                  onUserChange={(userId) => {
+                                    const updatedUserStory = { ...story, assignedUserId: userId }
+                                    updateUserStory(updatedUserStory)
+                                  }}
+                                  size="sm"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 mb-2 block">Story Points:</label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="21"
+                                value={story.storyPoints || ""}
+                                onChange={(e) => {
+                                  const points = e.target.value ? Number.parseInt(e.target.value) : undefined
+                                  const updatedUserStory = { ...story, storyPoints: points }
+                                  updateUserStory(updatedUserStory)
+                                }}
+                                placeholder="Points"
+                                className="w-20"
+                              />
                             </div>
                           </div>
                         </CardContent>
@@ -458,23 +581,32 @@ export default function Dashboard() {
                               {task.estimatedHours && <Badge variant="outline">{task.estimatedHours}h</Badge>}
                             </div>
 
-                            {assignedUser && (
-                              <div className="flex items-center space-x-2">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="text-xs">
-                                    {assignedUser.name
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <div className="text-sm font-medium">{assignedUser.name}</div>
-                                  <div className="text-xs text-gray-500 capitalize">{assignedUser.role}</div>
-                                </div>
+                            <div className="flex items-center space-x-2">
+                              <Avatar className="w-6 h-6">
+                                <AvatarImage src={assignedUser.avatar || "/placeholder.svg"} />
+                                <AvatarFallback className="text-xs">
+                                  {assignedUser.name
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="text-sm font-medium">{assignedUser.name}</div>
+                                <div className="text-xs text-gray-500 capitalize">{assignedUser.role}</div>
                               </div>
-                            )}
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700 mb-2 block">Assigned to:</label>
+                              <UserSelector
+                                selectedUserId={task.assignedUserId}
+                                onUserChange={(userId) => {
+                                  const updatedTask = { ...task, assignedUserId: userId }
+                                  updateTask(updatedTask)
+                                }}
+                                size="sm"
+                              />
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
